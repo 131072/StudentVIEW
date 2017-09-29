@@ -1,0 +1,40 @@
+<html>
+  <head>
+    <script type="text/javascript" src="gui.js"></script>
+    <link rel="stylesheet" href="styles.css" type="text/css" />
+    <script type="text/javascript" src="StudentVIEW.js"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.4/angular.min.js"></script>
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  </head>
+  <div ng-app="App" ng-controller="AppCtrl" layout="row" layout-fill ng-cloak>
+    <section layout="column" flex layout-align="center center" class="login">
+        <md-card class="md-whiteframe-4dp">
+            <md-toolbar>
+                <div layout="column" layout-padding layout-align="center center">
+                    <div>
+                        <md-icon class="logo">home</md-icon>
+                    </div>
+                    <div class="md-headline md-padding">Login</div>
+                </div>
+            </md-toolbar>
+            <md-card-content>
+                <form name="login">
+                    <md-input-container class="md-block">
+                        <label for="username">username</label>
+                        <input type="username" name="username" ng-model="vm.username" required />
+                    </md-input-container>
+                    <md-input-container class="md-block">
+                        <label for="password">Password</label>
+                        <input type="password" name="password" ng-model="vm.password" required />
+                    </md-input-container>
+                    <md-input-container class="md-block">
+                        <div layout="row" layout-align="center center">
+                            <md-button class="md-raised md-accent" flex="50">Login</md-button>
+                        </div>
+                    </md-input-container>
+                </form>
+            </md-card-content>
+        </md-card>
+    </section>
+</div>
+</html>

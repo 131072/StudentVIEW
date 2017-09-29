@@ -1,0 +1,13 @@
+body {
+    background-color: #EEEEEE;
+}
+
+.login md-card {
+    width: 400px;
+}
+
+.login .logo {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+}
