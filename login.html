@@ -1,28 +1,31 @@
+<!DOCTYPE html>
 <html>
-<head>
-  <link rel="stylesheet" href="loginstyle.css">
-</head>
-<body>
-<hgroup>
-  <h1>StudentVIEW Login</h1>
-</hgroup>
-<form>
-  <div class="group">
-    <input id="username" type="text"><span class="highlight"></span><span class="bar"></span>
-    <label>Username</label>
-  </div>
-  <div class="group">
-    <input id="password" type="password"><span class="highlight"></span><span class="bar"></span>
-    <label>Password</label>
-  </div>
-  <div class="group" style="display:none;">
-    <input id="endpoint" type="endpoint"><span class="highlight"></span><span class="bar"></span>
-    <label>Endpoint</label>
-  </div>
-  <button type="button" id="loginbutton" onclick="svue.testAccount()" class="button buttonBlue">Login
+
+  <head>
+    <link rel="stylesheet" href="loginstyle.css">
+  </head>
+
+  <body>
+    <hgroup>
+      <h1>StudentVIEW Login</h1>
+    </hgroup>
+    <form>
+      <div class="group">
+        <input id="username" type="text"><span class="highlight"></span><span class="bar"></span>
+        <label>Username</label>
+      </div>
+      <div class="group">
+        <input id="password" type="password"><span class="highlight"></span><span class="bar"></span>
+        <label>Password</label>
+      </div>
+      <div class="group" style="display:none;">
+        <input id="endpoint" type="endpoint"><span class="highlight"></span><span class="bar"></span>
+        <label>Endpoint</label>
+      </div>
+      <button type="button" id="loginbutton" onclick="svue.testAccount()" class="button buttonBlue">Login
     <div class="ripples buttonRipples"><span class="ripplesCircle"></span></div>
   </button>
-</form>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
-<script src="StudentVIEW.js"></script>
-</body>
+    </form>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script src="StudentVIEW.js"></script>
+  </body>
