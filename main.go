@@ -19,6 +19,7 @@ var username string
 var password string
 var err error
 var assShow bool
+var changeset *govue.Changeset
 
 func start() {
 	go func() {
@@ -132,6 +133,48 @@ func mainPage() {
 		document.GetElementByID("avggradegraph").AppendChild(g)
 		bar := js.Global.Call("newgraph", g, "avggradegraph")
 		bar.Call("animate", (sum/float64(len(total)))/100)
+		store := locstor.NewDataStore(locstor.JSONEncoding)
+		var oldGradebook govue.Gradebook
+		if err := store.Find("gradebook", &oldGradebook); err == nil {
+			fmt.Println("test")
+			changeset, _ = govue.CalcChangeset(&oldGradebook, grades)
+			if changeset.CourseChanges != nil {
+				document.GetElementByID("changesornah").SetAttribute("style", "display:none;")
+				for index1 := range changeset.CourseChanges {
+					for index := range changeset.CourseChanges[index1].AssignmentChanges {
+						if changeset.CourseChanges[index1].AssignmentChanges[index].ScoreChange {
+							publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
+								changeset.CourseChanges[index1].Course.ID,
+								changeset.CourseChanges[index1].AssignmentChanges[index].PreviousScore,
+								changeset.CourseChanges[index1].AssignmentChanges[index].NewScore))
+						}
+						if changeset.CourseChanges[index1].AssignmentChanges[index].PointsChange {
+							publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
+								changeset.CourseChanges[index1].Course.ID,
+								changeset.CourseChanges[index1].AssignmentChanges[index].PreviousPoints,
+								changeset.CourseChanges[index1].AssignmentChanges[index].NewPoints))
+						}
+					}
+				}
+			}
+		} else {
+			fmt.Println(err)
+		}
+		if err := store.Delete("gradebook"); err != nil {
+			// Handle err
+		}
+		if err := store.Save("gradebook", grades); err != nil {
+			fmt.Println("Couldn't save grades!")
+			fmt.Println(err)
+		}
+	}()
+}
+
+func publishChange(message string) {
+	go func() {
+		document := dom.GetWindow().Document()
+		g := document.CreateElement("h4")
+		document.GetElementByID("changedassignments").AppendChild(g)
 	}()
 }
 
