@@ -10,6 +10,7 @@ import (
 	//"time"
 	"github.com/go-humble/locstor"
 	//"reflect"
+	"strconv"
 )
 
 var jQuery = jquery.NewJQuery
@@ -20,6 +21,7 @@ var password string
 var err error
 var assShow bool
 var changeset *govue.Changeset
+var lastShown int = -1
 
 func start() {
 	go func() {
@@ -29,11 +31,13 @@ func start() {
 }
 
 func main() {
-	js.Global.Set("svue", map[string]interface{}{
-		"testAccount":     testAccount,
-		"start":           start,
-		"ShowAssignments": ShowAssignments,
-	})
+	go func() {
+		js.Global.Set("svue", map[string]interface{}{
+			"testAccount":     testAccount,
+			"start":           start,
+			"ShowAssignments": ShowAssignments,
+		})
+	}()
 }
 
 func testAccount() {
@@ -114,7 +118,7 @@ func mainPage() {
 					assignmentP := document.CreateElement("p")
 					name := grades.Courses[index].CurrentMark.Assignments[i].Name
 					score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score / grades.Courses[index].CurrentMark.Assignments[i].Score.PossibleScore
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v", name, score))
+					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%%", name, 100*score))
 					assignDiv.AppendChild(assignmentP)
 				}
 				document.GetElementByID("assignments").AppendChild(assignDiv)
@@ -179,13 +183,17 @@ func publishChange(message string) {
 }
 
 func ShowAssignments(class string) {
-	document := dom.GetWindow().Document()
-	for i := 0; i > 25; i++ {
-		assignmentP := document.GetElementByID("assignments" + string(i))
+	go func() {
+		fmt.Println("asked to show assignments")
+		document := dom.GetWindow().Document()
+		if lastShown != -1 {
+			assignmentP := document.GetElementByID("assignments" + strconv.Itoa(lastShown))
+			assignmentP.SetAttribute("style", "display:none;")
+		}
+		assignmentP := document.GetElementByID("assignments" + class)
 		assignmentP.SetAttribute("style", "")
-	}
-	assignmentP := document.GetElementByID("assignments" + class)
-	assignmentP.SetAttribute("style", "")
-	assignments := document.GetElementByID("assignmentholder")
-	assignments.SetAttribute("style", "")
+		assignments := document.GetElementByID("assignmentholder")
+		assignments.SetAttribute("style", "")
+		lastShown, _ = strconv.Atoi(class)
+	}()
 }
