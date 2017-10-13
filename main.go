@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/SkyrisBactera/govue"
 	"github.com/gopherjs/gopherjs/js"
@@ -15,13 +16,13 @@ import (
 
 var jQuery = jquery.NewJQuery
 var endpoint string
-var endpoints []string = []string{"https://svue.psdschools.org/Service/PXPCommunication.asmx", "https://vue.d51schools.org/Service/PXPCommunication.asmx", "https://parent.ouhsd.k12.ca.us/Service/PXPCommunication.asmx", "https://d47.edupoint.com/Service/PXPCommunication.asmx", "https://afsd.edupoint.com/Service/PXPCommunication.asmx"}
+var endpoints = []string{"https://svue.psdschools.org/Service/PXPCommunication.asmx", "https://vue.d51schools.org/Service/PXPCommunication.asmx", "https://parent.ouhsd.k12.ca.us/Service/PXPCommunication.asmx", "https://d47.edupoint.com/Service/PXPCommunication.asmx", "https://afsd.edupoint.com/Service/PXPCommunication.asmx"}
 var username string
 var password string
 var err error
 var assShow bool
 var changeset *govue.Changeset
-var lastShown int = -1
+var lastShown = -1
 
 func start() {
 	go func() {
@@ -35,7 +36,7 @@ func main() {
 		js.Global.Set("svue", map[string]interface{}{
 			"testAccount":     testAccount,
 			"start":           start,
-			"ShowAssignments": ShowAssignments,
+			"showAssignments": showAssignments,
 		})
 	}()
 }
@@ -47,8 +48,8 @@ func testAccount() {
 		//endpointDiv := document.GetElementByID("endpoint").(*dom.HTMLDivElement)
 		username = document.GetElementByID("username").(*dom.HTMLInputElement).Value
 		password = document.GetElementByID("password").(*dom.HTMLInputElement).Value
-		for index, _ := range endpoints {
-			_, err := govue.SignInStudent(username, password, endpoints[index])
+		for index := range endpoints {
+			_, err = govue.SignInStudent(username, password, endpoints[index])
 			if err == nil {
 				endpoint = endpoints[index]
 				break
@@ -109,7 +110,7 @@ func mainPage() {
 				fmt.Println(grade)
 				g := document.CreateElement("div")
 				g.SetAttribute("id", fmt.Sprintf("graph%v", index))
-				g.SetAttribute("onclick", fmt.Sprintf("svue.ShowAssignments(%v)", index))
+				g.SetAttribute("onclick", fmt.Sprintf("svue.showAssignments(%v)", index))
 				assignDiv := document.CreateElement("div")
 				assignDiv.SetAttribute("style", "display:none;")
 				assignDiv.SetID(fmt.Sprintf("assignments%v", index))
@@ -117,8 +118,29 @@ func mainPage() {
 				for i := range grades.Courses[index].CurrentMark.Assignments {
 					assignmentP := document.CreateElement("p")
 					name := grades.Courses[index].CurrentMark.Assignments[i].Name
-					score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score / grades.Courses[index].CurrentMark.Assignments[i].Score.PossibleScore
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%%", name, 100*score))
+					if !grades.Courses[index].CurrentMark.Assignments[i].Score.Graded {
+						assignmentP.SetInnerHTML(fmt.Sprintf("%s: Not graded", name))
+					} else if grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "IB Rubric 0-8" {
+						proficiency := "Error"
+						score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score
+						if score == 1 || score == 2 {
+							proficiency = "Limited"
+						} else if score == 3 || score == 4 {
+							proficiency = "Adequate"
+						} else if score == 5 || score == 6 {
+							proficiency = "Proficient"
+						} else if score == 7 || score == 8 {
+							proficiency = "Advanced"
+						}
+						assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, proficiency))
+					} else if grades.Courses[index].CurrentMark.Assignments[i].Score.Percentage {
+						assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, toLetter(grades.Courses[index].CurrentMark.Assignments[i].Score.Score)))
+
+					} else {
+						score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score / grades.Courses[index].CurrentMark.Assignments[i].Score.PossibleScore
+						properscore := 100 * score
+						assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, properscore, toLetter(properscore)))
+					}
 					assignDiv.AppendChild(assignmentP)
 				}
 				document.GetElementByID("assignments").AppendChild(assignDiv)
@@ -159,6 +181,47 @@ func mainPage() {
 								changeset.CourseChanges[index1].AssignmentChanges[index].NewPoints))
 						}
 					}
+					if changeset.CourseChanges[index1].GradeChange.GradeIncrease {
+						publishChange(fmt.Sprintf("Your grade in %s increased from %v%% (%s) to %v%% (%s)",
+							changeset.CourseChanges[index1].Course.ID,
+							changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
+							changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
+							changeset.CourseChanges[index1].GradeChange.NewGradePct,
+							changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
+					}
+					if !changeset.CourseChanges[index1].GradeChange.GradeIncrease {
+						publishChange(fmt.Sprintf("Your grade in %s decreased from %v%% (%s) to %v%% (%s)",
+							changeset.CourseChanges[index1].Course.ID,
+							changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
+							changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
+							changeset.CourseChanges[index1].GradeChange.NewGradePct,
+							changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
+					}
+					for index := range changeset.CourseChanges[index1].AssignmentAdditions {
+						message := fmt.Sprintf("A new assignment called %s was added. It was assigned on %v.",
+							changeset.CourseChanges[index1].AssignmentAdditions[index].Name,
+							changeset.CourseChanges[index1].AssignmentAdditions[index].Date.Time)
+						if !changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.IsZero() {
+							if changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time.After(time.Now()) {
+								message = message + fmt.Sprintf(" It is due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
+							} else {
+								message = message + fmt.Sprintf(" It was due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
+							}
+						}
+						if changeset.CourseChanges[index1].AssignmentAdditions[index].Score.Graded {
+							message = message + fmt.Sprintf(" You got a %v%%.", 100*(changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points/changeset.CourseChanges[index1].AssignmentAdditions[index].Points.PossiblePoints))
+						}
+						if changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points != 0 {
+							message = message + fmt.Sprintf(" It is worth %v points", changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points)
+						}
+						if changeset.CourseChanges[index1].AssignmentAdditions[index].Notes != "" {
+							message = message + fmt.Sprintf(" %s added a note, \"%s\".", changeset.CourseChanges[index1].Course.Teacher, changeset.CourseChanges[index1].AssignmentAdditions[index].Notes)
+						}
+						publishChange(message)
+					}
+					for index := range changeset.CourseChanges[index1].AssignmentRemovals {
+						publishChange(fmt.Sprintf("The assignment %s was removed", changeset.CourseChanges[index1].AssignmentRemovals[index].Name))
+					}
 				}
 			}
 		} else {
@@ -178,11 +241,13 @@ func publishChange(message string) {
 	go func() {
 		document := dom.GetWindow().Document()
 		g := document.CreateElement("h4")
+		br := document.CreateElement("br")
+		document.GetElementByID("changedassignments").AppendChild(br)
 		document.GetElementByID("changedassignments").AppendChild(g)
 	}()
 }
 
-func ShowAssignments(class string) {
+func showAssignments(class string) {
 	go func() {
 		fmt.Println("asked to show assignments")
 		document := dom.GetWindow().Document()
@@ -196,4 +261,35 @@ func ShowAssignments(class string) {
 		assignments.SetAttribute("style", "")
 		lastShown, _ = strconv.Atoi(class)
 	}()
+}
+
+func toLetter(score float64) string {
+	grade := "Couldn't get letter grade"
+	fmt.Println("Processing: " + strconv.FormatFloat(score, 'f', 6, 64))
+	if score >= 100 {
+		grade = "A+"
+	} else if score >= 93 && score < 100 {
+		grade = "A"
+	} else if score <= 92.9 && score >= 89 {
+		grade = "A-"
+	} else if score <= 88.9 && score >= 87 {
+		grade = "B+"
+	} else if score <= 86.9 && score >= 83 {
+		grade = "B"
+	} else if score <= 82.9 && score >= 79 {
+		grade = "B-"
+	} else if score <= 78.9 && score >= 77 {
+		grade = "C+"
+	} else if score <= 76.9 && score >= 73 {
+		grade = "C"
+	} else if score <= 72.9 && score >= 69 {
+		grade = "C-"
+	} else if score <= 68.9 && score >= 67 {
+		grade = "D+"
+	} else if score <= 66.9 && score >= 60 {
+		grade = "D"
+	} else {
+		grade = "F"
+	}
+	return grade
 }
