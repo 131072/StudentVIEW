@@ -1,3 +1,7 @@
+navigator.serviceWorker && navigator.serviceWorker.register('/studentview/sw.js').then(function(registration) {
+  console.log('Excellent, registered with scope: ', registration.scope);
+});
+
 function newgraph(x, y, z) {
   var bar = new ProgressBar.SemiCircle(x, {
     strokeWidth: 3,
@@ -5,14 +9,14 @@ function newgraph(x, y, z) {
     trailColor: '#eee',
     trailWidth: 1,
     easing: 'easeInOut',
-    duration: 1400,
+    duration: 2800,
     svgStyle: null,
     text: {
       value: '',
       alignToBottom: false
     },
-    from: {color: 'rgb(244, 67, 54)'},
-    to: {color: 'rgb(76, 175, 80)'},
+    from: {color: 'rgb(150, 0, 0)'},
+    to: {color: 'rgb(0, 168, 0)'},
     // Set default step function for all animate calls
     step: (state, bar) => {
       bar.path.setAttribute('stroke', state.color);
@@ -25,7 +29,7 @@ function newgraph(x, y, z) {
           bar.setText(value + "%")
         }
         else {
-          bar.setText(value + "% (" + z + ")");
+          bar.setText(value + "% (" + svue.toLetter(value) + ")");
         }
       }
 
@@ -35,5 +39,6 @@ function newgraph(x, y, z) {
   bar.text.style.fontFamily = '"Raleway", Helvetica, sans-serif';
   bar.text.style.fontSize = '100%';
   x.className = y;
+  bar.setText(z)
   return bar
 }

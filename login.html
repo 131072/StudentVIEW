@@ -2,6 +2,35 @@
 <html>
 
   <head>
+    <script src="https://cdn.rawgit.com/HubSpot/pace/master/pace.min.js"></script>
+    <link href="https://cdn.rawgit.com/HubSpot/pace/master/themes/purple/pace-theme-fill-left.css" rel="stylesheet" />
+    <script type='text/javascript'>
+      function loadScript(url, callback) {
+        var script = document.createElement("script")
+        script.type = "text/javascript";
+        if (script.readyState) { //IE
+          script.onreadystatechange = function() {
+            if (script.readyState === "loaded" || script.readyState === "complete") {
+              script.onreadystatechange = null;
+              callback();
+            }
+          };
+        } else { //Others
+          script.onload = function() {
+            callback();
+          };
+        }
+
+        script.src = url;
+        document.getElementsByTagName("head")[0].appendChild(script);
+      }
+
+
+      // call the function...
+      loadScript("https://cdn.rawgit.com/HubSpot/pace/master/pace.min.js", function() {
+        Pace.start()
+      });
+    </script>
     <link rel="stylesheet" href="loginstyle.css">
   </head>
 
