@@ -31,6 +31,7 @@ form {
 	margin-bottom: 45px;
 }
 
+/*
 input {
 	font-size: 18px;
 	padding: 10px 10px 10px 5px;
@@ -46,9 +47,6 @@ input {
 
 input:focus { outline: none; }
 
-
-/* Label */
-
 label {
 	color: #999;
 	font-size: 18px;
@@ -60,13 +58,9 @@ label {
 	transition: all 0.2s ease;
 }
 
-
-/* active */
-
 input:focus ~ label, input.used ~ label {
 	top: -20px;
   transform: scale(.75); left: -2px;
-	/* font-size: 14px; */
 	color: #4a89dc;
 }
 
