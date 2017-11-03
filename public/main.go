@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"strconv"
@@ -68,6 +69,21 @@ func main() {
 	})
 }
 
+type countWG struct {
+	sync.WaitGroup
+	Count int // Race conditions, only for info logging.
+}
+
+func (cg *countWG) add(delta int) {
+	cg.Count += delta
+	cg.WaitGroup.Add(delta)
+}
+
+func (cg *countWG) done() {
+	cg.Count--
+	cg.WaitGroup.Done()
+}
+
 func testAccount() {
 	defer timeTrack(time.Now(), "testAccount")
 	go func() {
@@ -75,19 +91,32 @@ func testAccount() {
 		//endpointDiv := document.GetElementByID("endpoint").(*dom.HTMLDivElement)
 		username = document.GetElementByID("username").(*dom.HTMLInputElement).Value
 		password = document.GetElementByID("password").(*dom.HTMLInputElement).Value
+		counted := len(endpoints)
 		for index := range endpoints {
-			_, err = govue.SignInStudent(username, password, endpoints[index])
-			if err == nil {
-				endpoint = endpoints[index]
+			go func(index int) {
+				_, err = govue.SignInStudent(username, password, endpoints[index])
+				if err == nil {
+					fmt.Println(endpoints[index])
+					endpoint = endpoints[index]
+					return
+				}
+				counted--
+			}(index)
+		}
+		for endpoint == "" {
+			time.Sleep(time.Millisecond)
+			fmt.Print(counted)
+			if counted == 0 {
 				break
 			}
 		}
 		if endpoint != "" {
+			fmt.Println("hurts")
 			expires := time.Now().Add(time.Hour * 24) // Set expiry time to in one hour
 			cookie.Set("username", username, &expires, "/")
 			cookie.Set("password", password, &expires, "/")
 			cookie.Set("endpoint", endpoint, &expires, "/")
-			go func() { js.Global.Get("window").Get("location").Call("replace", "index.html") }()
+			js.Global.Get("window").Get("location").Call("replace", "index.html")
 		} else {
 			fmt.Println("Bad password, username, or no correct endpoint")
 		}
@@ -118,37 +147,42 @@ func mainPage(grades *govue.Gradebook) {
 	//jQuery("username").SetText(username)
 	var total []float64
 	fmt.Println(grades.Courses)
+	var wg sync.WaitGroup
+	wg.Add(len(grades.Courses))
 	for index := range grades.Courses {
-
-		//gradeinfo := fmt.Sprintf("%s (%s)", grades.Courses[index].Teacher, grades.Courses[index].ID.Name)
-		grade := grades.Courses[index].CurrentMark.RawGradeScore
-		lettergrade := grades.Courses[index].CurrentMark.LetterGrade
-		var g dom.Element
-		var bar *js.Object
-		if grade != 0 {
-			if document.GetElementByID(fmt.Sprintf("graph%v", index)) == nil {
-				g = document.CreateElement("div")
-				g.SetAttribute("id", fmt.Sprintf("graph%v", index))
-				g.SetAttribute("onclick", fmt.Sprintf("svue.showAssignments(%v)", index))
-				document.GetElementByID("gradegraph").AppendChild(g)
-				bar = js.Global.Call("newgraph", g, "gradegraph", lettergrade)
-			} else {
-				g = document.GetElementByID(fmt.Sprintf("graph%v", index))
-				g.SetOuterHTML("")
-				g = document.CreateElement("div")
-				g.SetAttribute("id", fmt.Sprintf("graph%v", index))
-				g.SetAttribute("onclick", fmt.Sprintf("svue.showAssignments(%v)", index))
-				document.GetElementByID("gradegraph").AppendChild(g)
-				bar = js.Global.Call("newgraph", g, "gradegraph", lettergrade)
-			}
+		go func(index int) {
+			//gradeinfo := fmt.Sprintf("%s (%s)", grades.Courses[index].Teacher, grades.Courses[index].ID.Name)
+			grade := grades.Courses[index].CurrentMark.RawGradeScore
 			total = append(total, grade)
-			bar.Call("animate", grade/100)
-		}
-		//jQuery("#mainPage").Append(fmt.Sprintf("<p style='font-size: 1.5em' id='grade%v'>%s:</p><b style='color: green; font-size: 1.5em'>%s</b><hr>", index, gradeinfo, grade))
+			wg.Done()
+			lettergrade := grades.Courses[index].CurrentMark.LetterGrade
+			var g dom.Element
+			var bar *js.Object
+			if grade != 0 {
+				if document.GetElementByID(fmt.Sprintf("graph%v", index)) == nil {
+					g = document.CreateElement("div")
+					g.SetAttribute("id", fmt.Sprintf("graph%v", index))
+					g.SetAttribute("onclick", fmt.Sprintf("svue.showAssignments(%v)", index))
+					document.GetElementByID("gradegraph").AppendChild(g)
+					bar = js.Global.Call("newgraph", g, "gradegraph", lettergrade)
+				} else {
+					g = document.GetElementByID(fmt.Sprintf("graph%v", index))
+					g.SetOuterHTML("")
+					g = document.CreateElement("div")
+					g.SetAttribute("id", fmt.Sprintf("graph%v", index))
+					g.SetAttribute("onclick", fmt.Sprintf("svue.showAssignments(%v)", index))
+					document.GetElementByID("gradegraph").AppendChild(g)
+					bar = js.Global.Call("newgraph", g, "gradegraph", lettergrade)
+				}
+				bar.Call("animate", grade/100)
+			}
+			//jQuery("#mainPage").Append(fmt.Sprintf("<p style='font-size: 1.5em' id='grade%v'>%s:</p><b style='color: green; font-size: 1.5em'>%s</b><hr>", index, gradeinfo, grade))
+		}(index)
 	}
 	var bar *js.Object
 	var sum float64
 	var g dom.Element
+	wg.Wait()
 	for _, num := range total {
 		sum += num
 	}
@@ -188,38 +222,42 @@ func afterPage(grades *govue.Gradebook) {
 		fmt.Println("whoah")
 		document := dom.GetWindow().Document()
 		for index := range grades.Courses {
-			assignDiv := document.CreateElement("div")
-			assignDiv.SetAttribute("style", "display:none;")
-			assignDiv.SetID(fmt.Sprintf("assignments%v", index))
-			for i := range grades.Courses[index].CurrentMark.Assignments {
-				assignmentP := document.CreateElement("p")
-				name := grades.Courses[index].CurrentMark.Assignments[i].Name
-				if !grades.Courses[index].CurrentMark.Assignments[i].Score.Graded {
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: Not graded", name))
-				} else if grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "IB Rubric 0-8" {
-					proficiency := "Error"
-					score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score
-					if score == 1 || score == 2 {
-						proficiency = "Limited"
-					} else if score == 3 || score == 4 {
-						proficiency = "Adequate"
-					} else if score == 5 || score == 6 {
-						proficiency = "Proficient"
-					} else if score == 7 || score == 8 {
-						proficiency = "Advanced"
-					}
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, proficiency))
-				} else if grades.Courses[index].CurrentMark.Assignments[i].Score.Percentage {
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, toLetter(grades.Courses[index].CurrentMark.Assignments[i].Score.Score)))
+			go func(index int) {
+				assignDiv := document.CreateElement("div")
+				assignDiv.SetAttribute("style", "display:none;")
+				assignDiv.SetID(fmt.Sprintf("assignments%v", index))
+				for i := range grades.Courses[index].CurrentMark.Assignments {
+					go func(i int) {
+						assignmentP := document.CreateElement("p")
+						name := grades.Courses[index].CurrentMark.Assignments[i].Name
+						if !grades.Courses[index].CurrentMark.Assignments[i].Score.Graded {
+							assignmentP.SetInnerHTML(fmt.Sprintf("%s: Not graded", name))
+						} else if grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "IB Rubric 0-8" {
+							proficiency := "Error"
+							score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score
+							if score == 1 || score == 2 {
+								proficiency = "Limited"
+							} else if score == 3 || score == 4 {
+								proficiency = "Adequate"
+							} else if score == 5 || score == 6 {
+								proficiency = "Proficient"
+							} else if score == 7 || score == 8 {
+								proficiency = "Advanced"
+							}
+							assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, proficiency))
+						} else if grades.Courses[index].CurrentMark.Assignments[i].Score.Percentage {
+							assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, grades.Courses[index].CurrentMark.Assignments[i].Score.Score, toLetter(grades.Courses[index].CurrentMark.Assignments[i].Score.Score)))
 
-				} else {
-					score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score / grades.Courses[index].CurrentMark.Assignments[i].Score.PossibleScore
-					properscore := 100 * score
-					assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, properscore, toLetter(properscore)))
+						} else {
+							score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score / grades.Courses[index].CurrentMark.Assignments[i].Score.PossibleScore
+							properscore := 100 * score
+							assignmentP.SetInnerHTML(fmt.Sprintf("%s: %v%% (%s)", name, properscore, toLetter(properscore)))
+						}
+						assignDiv.AppendChild(assignmentP)
+					}(i)
 				}
-				assignDiv.AppendChild(assignmentP)
-			}
-			document.GetElementByID("assignments").AppendChild(assignDiv)
+				document.GetElementByID("assignments").AppendChild(assignDiv)
+			}(index)
 		}
 		var oldGradebook govue.Gradebook
 		store := locstor.NewDataStore(locstor.JSONEncoding)
@@ -232,63 +270,71 @@ func afterPage(grades *govue.Gradebook) {
 				fmt.Println(changeset.CourseChanges)
 				document.GetElementByID("changesornah").SetAttribute("style", "display:none;")
 				for index1 := range changeset.CourseChanges {
-					for index := range changeset.CourseChanges[index1].AssignmentChanges {
-						if changeset.CourseChanges[index1].AssignmentChanges[index].ScoreChange {
-							publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
-								changeset.CourseChanges[index1].Course.ID,
-								changeset.CourseChanges[index1].AssignmentChanges[index].PreviousScore,
-								changeset.CourseChanges[index1].AssignmentChanges[index].NewScore))
+					go func(index1 int) {
+						for index := range changeset.CourseChanges[index1].AssignmentChanges {
+							go func(index int) {
+								if changeset.CourseChanges[index1].AssignmentChanges[index].ScoreChange {
+									publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
+										changeset.CourseChanges[index1].Course.ID,
+										changeset.CourseChanges[index1].AssignmentChanges[index].PreviousScore,
+										changeset.CourseChanges[index1].AssignmentChanges[index].NewScore))
+								}
+								if changeset.CourseChanges[index1].AssignmentChanges[index].PointsChange {
+									publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
+										changeset.CourseChanges[index1].Course.ID,
+										changeset.CourseChanges[index1].AssignmentChanges[index].PreviousPoints,
+										changeset.CourseChanges[index1].AssignmentChanges[index].NewPoints))
+								}
+							}(index)
 						}
-						if changeset.CourseChanges[index1].AssignmentChanges[index].PointsChange {
-							publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
-								changeset.CourseChanges[index1].Course.ID,
-								changeset.CourseChanges[index1].AssignmentChanges[index].PreviousPoints,
-								changeset.CourseChanges[index1].AssignmentChanges[index].NewPoints))
-						}
-					}
-					if changeset.CourseChanges[index1].GradeChange != nil {
-						if changeset.CourseChanges[index1].GradeChange.GradeIncrease {
-							publishChange(fmt.Sprintf("Your grade in %s increased from %v%% (%s) to %v%% (%s)",
-								changeset.CourseChanges[index1].Course.ID,
-								changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
-								changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
-								changeset.CourseChanges[index1].GradeChange.NewGradePct,
-								changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
-						}
-						if !changeset.CourseChanges[index1].GradeChange.GradeIncrease {
-							publishChange(fmt.Sprintf("Your grade in %s decreased from %v%% (%s) to %v%% (%s)",
-								changeset.CourseChanges[index1].Course.ID,
-								changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
-								changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
-								changeset.CourseChanges[index1].GradeChange.NewGradePct,
-								changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
-						}
-					}
-					for index := range changeset.CourseChanges[index1].AssignmentAdditions {
-						message := fmt.Sprintf("A new assignment called %s was added. It was assigned on %v.",
-							changeset.CourseChanges[index1].AssignmentAdditions[index].Name,
-							changeset.CourseChanges[index1].AssignmentAdditions[index].Date.Time)
-						if !changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.IsZero() {
-							if changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time.After(time.Now()) {
-								message = message + fmt.Sprintf(" It is due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
-							} else {
-								message = message + fmt.Sprintf(" It was due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
+						if changeset.CourseChanges[index1].GradeChange != nil {
+							if changeset.CourseChanges[index1].GradeChange.GradeIncrease {
+								publishChange(fmt.Sprintf("Your grade in %s increased from %v%% (%s) to %v%% (%s)",
+									changeset.CourseChanges[index1].Course.ID,
+									changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
+									changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
+									changeset.CourseChanges[index1].GradeChange.NewGradePct,
+									changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
+							}
+							if !changeset.CourseChanges[index1].GradeChange.GradeIncrease {
+								publishChange(fmt.Sprintf("Your grade in %s decreased from %v%% (%s) to %v%% (%s)",
+									changeset.CourseChanges[index1].Course.ID,
+									changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
+									changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
+									changeset.CourseChanges[index1].GradeChange.NewGradePct,
+									changeset.CourseChanges[index1].GradeChange.NewLetterGrade))
 							}
 						}
-						if changeset.CourseChanges[index1].AssignmentAdditions[index].Score.Graded {
-							message = message + fmt.Sprintf(" You got a %v%%.", 100*(changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points/changeset.CourseChanges[index1].AssignmentAdditions[index].Points.PossiblePoints))
+						for index := range changeset.CourseChanges[index1].AssignmentAdditions {
+							go func(index int) {
+								message := fmt.Sprintf("A new assignment called %s was added. It was assigned on %v.",
+									changeset.CourseChanges[index1].AssignmentAdditions[index].Name,
+									changeset.CourseChanges[index1].AssignmentAdditions[index].Date.Time)
+								if !changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.IsZero() {
+									if changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time.After(time.Now()) {
+										message = message + fmt.Sprintf(" It is due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
+									} else {
+										message = message + fmt.Sprintf(" It was due on %v.", changeset.CourseChanges[index1].AssignmentAdditions[index].DueDate.Time)
+									}
+								}
+								if changeset.CourseChanges[index1].AssignmentAdditions[index].Score.Graded {
+									message = message + fmt.Sprintf(" You got a %v%%.", 100*(changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points/changeset.CourseChanges[index1].AssignmentAdditions[index].Points.PossiblePoints))
+								}
+								if changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points != 0 {
+									message = message + fmt.Sprintf(" It is worth %v points", changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points)
+								}
+								if changeset.CourseChanges[index1].AssignmentAdditions[index].Notes != "" {
+									message = message + fmt.Sprintf(" %s added a note, \"%s\".", changeset.CourseChanges[index1].Course.Teacher, changeset.CourseChanges[index1].AssignmentAdditions[index].Notes)
+								}
+								publishChange(message)
+							}(index)
 						}
-						if changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points != 0 {
-							message = message + fmt.Sprintf(" It is worth %v points", changeset.CourseChanges[index1].AssignmentAdditions[index].Points.Points)
+						for index := range changeset.CourseChanges[index1].AssignmentRemovals {
+							go func(index int) {
+								publishChange(fmt.Sprintf("The assignment %s was removed", changeset.CourseChanges[index1].AssignmentRemovals[index].Name))
+							}(index)
 						}
-						if changeset.CourseChanges[index1].AssignmentAdditions[index].Notes != "" {
-							message = message + fmt.Sprintf(" %s added a note, \"%s\".", changeset.CourseChanges[index1].Course.Teacher, changeset.CourseChanges[index1].AssignmentAdditions[index].Notes)
-						}
-						publishChange(message)
-					}
-					for index := range changeset.CourseChanges[index1].AssignmentRemovals {
-						publishChange(fmt.Sprintf("The assignment %s was removed", changeset.CourseChanges[index1].AssignmentRemovals[index].Name))
-					}
+					}(index1)
 				}
 			}
 		} else {
@@ -317,6 +363,7 @@ func showAssignments(class string) {
 		assignments := document.GetElementByID("assignmentholder")
 		assignments.SetAttribute("style", "")
 		lastShown, _ = strconv.Atoi(class)
+		js.Global.Call("scrollTo", assignmentP)
 	}()
 }
 

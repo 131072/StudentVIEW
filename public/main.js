@@ -42,3 +42,8 @@ function newgraph(x, y, z) {
   bar.setText(z)
   return bar
 }
+
+function scrollTo(x) {
+  console.log(x)
+  console.log($(window).scrollTo(x));
+}

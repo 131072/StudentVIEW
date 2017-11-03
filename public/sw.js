@@ -26,7 +26,10 @@ var filesToCache = [
   '/studentview/material.min.js',
   'https://cdn.rawgit.com/kimmobrunfeldt/progressbar.js/master/dist/progressbar.min.js',
   'https://cdn.rawgit.com/HubSpot/pace/master/pace.min.js',
-  'https://cdn.rawgit.com/HubSpot/pace/master/themes/purple/pace-theme-fill-left.css'
+  'https://cdn.rawgit.com/HubSpot/pace/master/themes/purple/pace-theme-fill-left.css',
+  '/studentview/',
+  'https://code.jquery.com/jquery-3.2.1.min.js',
+  'https://cdn.rawgit.com/flesler/jquery.scrollTo/master/jquery.scrollTo.min.js'
 ];
 
 self.addEventListener('install', function(e) {
