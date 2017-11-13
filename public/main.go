@@ -232,7 +232,7 @@ func afterPage(grades *govue.Gradebook) {
 						name := grades.Courses[index].CurrentMark.Assignments[i].Name
 						if !grades.Courses[index].CurrentMark.Assignments[i].Score.Graded {
 							assignmentP.SetInnerHTML(fmt.Sprintf("%s: Not graded", name))
-						} else if grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "IB Rubric 0-8" {
+						} else if grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "IB Rubric 0-8" || grades.Courses[index].CurrentMark.Assignments[i].ScoreType == "MYP Rubric Score" {
 							proficiency := "Error"
 							score := grades.Courses[index].CurrentMark.Assignments[i].Score.Score
 							if score == 1 || score == 2 {
