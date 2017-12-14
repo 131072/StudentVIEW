@@ -1,6 +1,11 @@
 # StudentVIEW
 ### Try it out at http://skyrisbactera.com/studentview
-#### An unofficial client for StudentVUE, because I was disatisifed with the GUI and user experience.
+#### A universal (not yet) client-side grade viewer, because I was disatisifed with the GUI and user experience.
+#### If your school is not supported by StudentVIEW, I would hope that you would contact me at davis.davalos.delosh@gmail.com so I can add support for your school's grading system.
+
+## Features
+* Progressive Web App
+* Follows Material Design Standards
 
 ## Build instructions
 
@@ -21,7 +26,7 @@ bash start.sh
 ```
 ## TODO
 * Make password saving method more secure
-* Optimize code to get grades faster. (Goroutines are you friend here!)
+* Optimize code to get grades faster. (More Goroutines!)
 * Make the UI look better
 
 ## Donate!
