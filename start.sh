@@ -5,6 +5,6 @@ kill () {
 }
 trap kill EXIT
 cd $GOPATH/src/github.com/SkyrisBactera/StudentVIEW/public
-GOOS=linux gopherjs build -w github.com/SkyrisBactera/StudentVIEW/public -o StudentVIEW.js &
+GOOS=linux gopherjs build -w github.com/SkyrisBactera/StudentVIEW/public -o StudentVIEW.js -m &
 cd $GOPATH/src/github.com/SkyrisBactera/StudentVIEW
 sudo env "PATH=$PATH" go run server.go

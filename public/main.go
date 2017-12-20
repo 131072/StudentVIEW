@@ -9,7 +9,6 @@ import (
 	"strconv"
 
 	"github.com/SkyrisBactera/govue"
-	"github.com/fabioberger/cookie"
 	"github.com/go-humble/locstor"
 	"github.com/gopherjs/gopherjs/js"
 	"github.com/gopherjs/jquery"
@@ -21,10 +20,10 @@ var endpoint string
 var endpoints = []string{"https://svue.psdschools.org/Service/PXPCommunication.asmx", "https://vue.d51schools.org/Service/PXPCommunication.asmx", "https://parent.ouhsd.k12.ca.us/Service/PXPCommunication.asmx", "https://d47.edupoint.com/Service/PXPCommunication.asmx", "https://afsd.edupoint.com/Service/PXPCommunication.asmx"}
 var username string
 var password string
-var err error
 var assShow bool
 var changeset *govue.Changeset
 var lastShown = -1
+var binStore = locstor.NewDataStore(locstor.JSONEncoding)
 
 //var grades *govue.Gradebook
 
@@ -33,13 +32,31 @@ func timeTrack(start time.Time, name string) {
 	log.Printf("%s took %s", name, elapsed)
 }
 
+func load(key string, holder interface{}) error {
+	defer timeTrack(time.Now(), "Loading "+key)
+	err := binStore.Find(key, holder)
+	if err != nil {
+		fmt.Printf("Load Error: %s failed with\n%s\n", key, err.Error())
+	}
+	return err
+}
+
+func save(key string, holder interface{}) error {
+	defer timeTrack(time.Now(), "Saving "+key)
+	if err := binStore.Save(key, holder); err != nil {
+		fmt.Printf("Save Error: %s failed with\n%s\n", key, err.Error())
+		return err
+	}
+	return nil
+}
+
+//Really slow
 func start() {
-	defer timeTrack(time.Now(), "start")
 	go func() {
+		defer timeTrack(time.Now(), "start")
 		login()
-		store := locstor.NewDataStore(locstor.JSONEncoding)
 		var oldGrades *govue.Gradebook
-		if err := store.Find("gradebook", &oldGrades); err == nil {
+		if err := load("gradebook", &oldGrades); err == nil {
 			go mainPage(oldGrades)
 		}
 		window := js.Global.Get("window")
@@ -53,8 +70,19 @@ func start() {
 			if err != nil {
 				fmt.Println(err)
 			}
-			go mainPage(grades)
-			go afterPage(grades)
+			if oldGrades != nil && grades != nil {
+				changeSet, err := govue.CalcChangeset(oldGrades, grades)
+				if err != nil {
+					fmt.Println(err)
+				}
+				if changeSet != nil {
+					go mainPage(grades)
+					go afterPage(grades)
+				}
+			} else {
+				go mainPage(grades)
+				go afterPage(grades)
+			}
 		}
 	}()
 }
@@ -85,8 +113,8 @@ func (cg *countWG) done() {
 }
 
 func testAccount() {
-	defer timeTrack(time.Now(), "testAccount")
 	go func() {
+		defer timeTrack(time.Now(), "testAccount")
 		document := dom.GetWindow().Document()
 		//endpointDiv := document.GetElementByID("endpoint").(*dom.HTMLDivElement)
 		username = document.GetElementByID("username").(*dom.HTMLInputElement).Value
@@ -94,7 +122,7 @@ func testAccount() {
 		counted := len(endpoints)
 		for index := range endpoints {
 			go func(index int) {
-				_, err = govue.SignInStudent(username, password, endpoints[index])
+				_, err := govue.SignInStudent(username, password, endpoints[index])
 				if err == nil {
 					fmt.Println(endpoints[index])
 					endpoint = endpoints[index]
@@ -111,11 +139,15 @@ func testAccount() {
 			}
 		}
 		if endpoint != "" {
-			fmt.Println("hurts")
-			expires := time.Now().Add(time.Hour * 24) // Set expiry time to in one hour
-			cookie.Set("username", username, &expires, "/")
-			cookie.Set("password", password, &expires, "/")
-			cookie.Set("endpoint", endpoint, &expires, "/")
+			if err := save("username", username); err != nil {
+				fmt.Println(err.Error())
+			}
+			if err := save("password", password); err != nil {
+				fmt.Println(err.Error())
+			}
+			if err := save("endpoint", endpoint); err != nil {
+				fmt.Println(err.Error())
+			}
 			js.Global.Get("window").Get("location").Call("replace", "index.html")
 		} else {
 			fmt.Println("Bad password, username, or no correct endpoint")
@@ -124,23 +156,30 @@ func testAccount() {
 }
 
 func login() {
-	defer timeTrack(time.Now(), "login")
-	var ok bool
-	fmt.Println("hey")
-	username, ok = cookie.Get("username")
-	if !ok {
-		js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
-	}
-	fmt.Println(username)
-	password, ok = cookie.Get("password")
-	if !ok {
-		js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
-	}
-	endpoint, ok = cookie.Get("endpoint")
-	if !ok {
-		js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
-	}
+	/*
+		document := dom.GetWindow().Document()
+		defer timeTrack(time.Now(), "login")
+		if err := load("username", &username); err != nil {
+			js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
+		} else {
+			document.GetElementByID("activeUser").SetInnerHTML(username)
+		}
+		if err := load("password", &password); err != nil {
+			js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
+		}
+		if err := load("endpoint", &endpoint); err != nil {
+			js.Global.Get("window").Get("location").Call("replace", "/studentview/login.html")
+		}
+	*/
+	develLogin()
 }
+
+func develLogin() {
+	username = "58697"
+	password = "^13371337^"
+	endpoint = "https://svue.psdschools.org/Service/PXPCommunication.asmx"
+}
+
 func mainPage(grades *govue.Gradebook) {
 	defer timeTrack(time.Now(), "mainPage")
 	document := dom.GetWindow().Document()
@@ -190,21 +229,21 @@ func mainPage(grades *govue.Gradebook) {
 		g = document.CreateElement("div")
 		g.SetID("avggraph")
 		document.GetElementByID("avggradegraph").AppendChild(g)
-		bar = js.Global.Call("newgraph", g, "avggradegraph")
+		bar = js.Global.Call("newgraph", g, "gradegraph")
 	} else {
 		g = document.GetElementByID("avggraph")
 		g.SetOuterHTML("")
 		g = document.CreateElement("div")
 		g.SetID("avggraph")
 		document.GetElementByID("avggradegraph").AppendChild(g)
-		bar = js.Global.Call("newgraph", g, "avggradegraph")
+		bar = js.Global.Call("newgraph", g, "gradegraph")
 	}
 	bar.Call("animate", (sum/float64(len(total)))/100)
 }
 
 func publishChange(message string) {
-	defer timeTrack(time.Now(), "publishChange")
 	go func() {
+		defer timeTrack(time.Now(), "publishChange")
 		fmt.Println("New info")
 		fmt.Println(message)
 		document := dom.GetWindow().Document()
@@ -217,8 +256,8 @@ func publishChange(message string) {
 }
 
 func afterPage(grades *govue.Gradebook) {
-	defer timeTrack(time.Now(), "afterPage")
 	go func() {
+		defer timeTrack(time.Now(), "afterPage")
 		fmt.Println("whoah")
 		document := dom.GetWindow().Document()
 		for index := range grades.Courses {
@@ -260,13 +299,14 @@ func afterPage(grades *govue.Gradebook) {
 			}(index)
 		}
 		var oldGradebook govue.Gradebook
-		store := locstor.NewDataStore(locstor.JSONEncoding)
-		if err := store.Find("gradebook", &oldGradebook); err == nil {
+		if err := load("gradebook", &oldGradebook); err == nil {
 			changeset, err = govue.CalcChangeset(&oldGradebook, grades)
 			if err != nil {
 				fmt.Println(err)
 			}
-			if changeset.CourseChanges != nil {
+			if changeset.CourseChanges == nil {
+				jQuery("#changesornah").SetText("No changes since last time!")
+			} else if changeset.CourseChanges != nil {
 				fmt.Println(changeset.CourseChanges)
 				document.GetElementByID("changesornah").SetAttribute("style", "display:none;")
 				for index1 := range changeset.CourseChanges {
@@ -275,13 +315,13 @@ func afterPage(grades *govue.Gradebook) {
 							go func(index int) {
 								if changeset.CourseChanges[index1].AssignmentChanges[index].ScoreChange {
 									publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
-										changeset.CourseChanges[index1].Course.ID,
+										changeset.CourseChanges[index1].Course.ID.Name,
 										changeset.CourseChanges[index1].AssignmentChanges[index].PreviousScore,
 										changeset.CourseChanges[index1].AssignmentChanges[index].NewScore))
 								}
 								if changeset.CourseChanges[index1].AssignmentChanges[index].PointsChange {
 									publishChange(fmt.Sprintf("Your assignment in %s changed from %v%% to %v%%",
-										changeset.CourseChanges[index1].Course.ID,
+										changeset.CourseChanges[index1].Course.ID.Name,
 										changeset.CourseChanges[index1].AssignmentChanges[index].PreviousPoints,
 										changeset.CourseChanges[index1].AssignmentChanges[index].NewPoints))
 								}
@@ -290,7 +330,7 @@ func afterPage(grades *govue.Gradebook) {
 						if changeset.CourseChanges[index1].GradeChange != nil {
 							if changeset.CourseChanges[index1].GradeChange.GradeIncrease {
 								publishChange(fmt.Sprintf("Your grade in %s increased from %v%% (%s) to %v%% (%s)",
-									changeset.CourseChanges[index1].Course.ID,
+									changeset.CourseChanges[index1].Course.ID.Name,
 									changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
 									changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
 									changeset.CourseChanges[index1].GradeChange.NewGradePct,
@@ -298,7 +338,7 @@ func afterPage(grades *govue.Gradebook) {
 							}
 							if !changeset.CourseChanges[index1].GradeChange.GradeIncrease {
 								publishChange(fmt.Sprintf("Your grade in %s decreased from %v%% (%s) to %v%% (%s)",
-									changeset.CourseChanges[index1].Course.ID,
+									changeset.CourseChanges[index1].Course.ID.Name,
 									changeset.CourseChanges[index1].GradeChange.PreviousGradePct,
 									changeset.CourseChanges[index1].GradeChange.PreviousLetterGrade,
 									changeset.CourseChanges[index1].GradeChange.NewGradePct,
@@ -340,10 +380,10 @@ func afterPage(grades *govue.Gradebook) {
 		} else {
 			fmt.Println(err)
 		}
-		if err := store.Delete("gradebook"); err != nil {
+		if err := binStore.Delete("gradebook"); err != nil {
 			// Handle err
 		}
-		if err := store.Save("gradebook", grades); err != nil {
+		if err := save("gradebook", grades); err != nil {
 			fmt.Println("Couldn't save grades!")
 			fmt.Println(err)
 		}
@@ -351,8 +391,8 @@ func afterPage(grades *govue.Gradebook) {
 }
 
 func showAssignments(class string) {
-	defer timeTrack(time.Now(), "showAssignments")
 	go func() {
+		defer timeTrack(time.Now(), "showAssignments")
 		document := dom.GetWindow().Document()
 		if lastShown != -1 {
 			assignmentP := document.GetElementByID("assignments" + strconv.Itoa(lastShown))
